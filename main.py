@@ -35,3 +35,20 @@ def extract_phone(parties):
         return match_from.group(1), None
     else:
         return None, None
+    
+# Call Log + Extraction of device information
+call_log = index_change(file, "Call Log")
+device_info = index_change(file, "Device Information")
+device_info['Name'] = device_info['Name'].str.strip()
+android_id = device_info[device_info["Name"] == "Android ID"]['Value']
+call_log["Parties"] = call_log["Parties"].apply(translate_to_english)
+call_log['Phone (From:)'], call_log['Phone (To:)'] = zip(*call_log['Parties'].apply(extract_phone))
+call_log.dropna(axis=1, inplace=True, how='all')
+call_log['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
+call_log['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)
+call_log = call_log[['Phone (From:)', 'Phone (To:)']]
+all_phone_numbers = set(call_log['Phone (To:)'].dropna()) | set(call_log['Phone (From:)'].dropna())
+call_log['to_from_tuple'] = list(zip(call_log['Phone (From:)'], call_log['Phone (To:)']))
+tuple_counts = call_log['to_from_tuple'].value_counts()
+for tup, count in tuple_counts.items():
+    print(tup, count)
