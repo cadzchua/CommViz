@@ -52,3 +52,21 @@ call_log['to_from_tuple'] = list(zip(call_log['Phone (From:)'], call_log['Phone 
 tuple_counts = call_log['to_from_tuple'].value_counts()
 for tup, count in tuple_counts.items():
     print(tup, count)
+
+instant_msgs = index_change(file, "Call Log")(file, "Instant Messages")
+def extract_phone_number(text):
+    match = re.search(r'\b(\d{4,})\b', str(text))
+    if match:
+        return match.group(1)
+    else:
+        return None
+
+instant_msgs['Phone (From:)'] = instant_msgs['From'].apply(extract_phone_number)
+instant_msgs['Phone (To:)'] = instant_msgs['To'].apply(extract_phone_number)
+instant_msgs.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
+instant_msgs['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)
+all_instant_messages_numbers = set(instant_msgs['Phone (To:)'].dropna()) | set(instant_msgs['Phone (From:)'].dropna())
+instant_msgs['to_from_tuple'] = list(zip(instant_msgs['Phone (From:)'], instant_msgs['Phone (To:)']))
+tuple_counts2 = instant_msgs['to_from_tuple'].value_counts()
+for tup, count in tuple_counts.items():
+    print(tup, count)
