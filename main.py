@@ -70,3 +70,23 @@ instant_msgs['to_from_tuple'] = list(zip(instant_msgs['Phone (From:)'], instant_
 tuple_counts2 = instant_msgs['to_from_tuple'].value_counts()
 for tup, count in tuple_counts.items():
     print(tup, count)
+
+# Email
+emails = index_change(file, "Emails")
+def extract_emails(text):
+    match = re.search(r'(.+@[A-Za-z]+.com)', str(text))
+    if match:
+        return match.group(1)
+    else:
+        return None
+
+emails['Email (From:)'] = emails['From'].apply(extract_emails)
+emails['Email (To:)'] = emails['To'].apply(extract_emails)
+emails.dropna(subset=['Email (From:)', 'Email (To:)'], how='all', inplace=True)
+emails['Email (From:)'].fillna(android_id.iloc[0], inplace=True)
+emails['Email (To:)'].fillna(android_id.iloc[0], inplace=True)
+all_emails = set(emails['Email (To:)'].dropna()) | set(emails['Email (From:)'].dropna())
+emails['to_from_tuple'] = list(zip(emails['Email (From:)'], emails['Email (To:)']))
+tuple_counts3 = emails['to_from_tuple'].value_counts()
+for (x,y), count in tuple_counts3.items():
+    print(x,y , count)
