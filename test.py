@@ -50,7 +50,7 @@ if uploaded_file is not None:
     tuple_counts = call_log['to_from_tuple'].value_counts()
     df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
     for (from_num, to_num), count in tuple_counts.items():
-        df_call.loc[len(df_call)] = [from_num, to_num, count**0.5]
+        df_call.loc[len(df_call)] = [from_num, to_num, count**0.66]
 
     # Instant Messages
     instant_msgs = call_log = xls.parse("Instant Messages", header=1)
@@ -63,7 +63,7 @@ if uploaded_file is not None:
     tuple_counts2 = instant_msgs['to_from_tuple'].value_counts()
     df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
     for (from_num, to_num), count in tuple_counts2.items():
-        df_imsg.loc[len(df_imsg)] = [from_num, to_num, count**0.5]
+        df_imsg.loc[len(df_imsg)] = [from_num, to_num, count**0.66]
 
     # Emails
     emails = xls.parse("Emails", header=1)
@@ -77,7 +77,7 @@ if uploaded_file is not None:
     tuple_counts3 = emails['to_from_tuple'].value_counts()
     df_email = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
     for (from_num, to_num), count in tuple_counts3.items():
-        df_email.loc[len(df_email)] = [from_num, to_num, count**0.5]
+        df_email.loc[len(df_email)] = [from_num, to_num, count**0.66]
 
     # Set header title
     st.title('Network Graph Visualization')
@@ -102,22 +102,120 @@ if uploaded_file is not None:
 
     elif len(selected_options) == 3:  # All three options selected
         G_combined = nx.compose_all([G_email, G_instant_messages, G_call])
+        for node, data in G_combined.nodes(data=True):
+            if node in G_email and node in G_instant_messages and node in G_call:
+                data['color'] = '#5c5c5c'
+            elif node in G_email and node in G_instant_messages:
+                data['color'] = 'green'
+            elif node in G_email and node in G_call:
+                data['color'] = '#8f9aff'
+            elif node in G_instant_messages and node in G_call:
+                data['color'] = 'orange'
+            elif node in G_email:
+                data['color'] = '#427bff'
+            elif node in G_instant_messages:
+                data['color'] = 'yellow'
+            elif node in G_call:
+                data['color'] = 'red'
+
+        for source, target, data in G_combined.edges(data=True):
+            if (source, target) in G_email.edges() and (source, target) in G_instant_messages.edges() and (source, target) in G_call.edges():
+                data['color'] = '#5c5c5c'
+            elif (source, target) in G_email.edges() and (source, target) in G_instant_messages.edges():
+                data['color'] = 'green'
+            elif (source, target) in G_email.edges() and (source, target) in G_call.edges():
+                data['color'] = '#8f9aff'
+            elif (source, target) in G_instant_messages.edges() and (source, target) in G_call.edges():
+                data['color'] = 'orange'
+            elif (source, target) in G_email.edges():
+                data['color'] = '#427bff'
+            elif (source, target) in G_instant_messages.edges():
+                data['color'] = 'yellow'
+            elif (source, target) in G_call.edges():
+                data['color'] = 'red'
 
     elif len(selected_options) == 2:  # Any two options selected
         if "Email" in selected_options and "Instant Messages" in selected_options:
             G_combined = nx.compose(G_email, G_instant_messages)
+            for node, data in G_combined.nodes(data=True):
+                if node in G_email and node in G_instant_messages:
+                    data['color'] = 'green'
+                elif node in G_email:
+                    data['color'] = '#427bff'
+                elif node in G_instant_messages:
+                    data['color'] = 'yellow'
+
+            for source, target, data in G_combined.edges(data=True):
+                if (source, target) in G_email.edges() and (source, target) in G_instant_messages.edges():
+                    data['color'] = 'green'
+                elif (source, target) in G_email.edges():
+                    data['color'] = '#427bff'
+                elif (source, target) in G_instant_messages.edges():
+                    data['color'] = 'yellow'
+                
         elif "Email" in selected_options and "Call" in selected_options:
             G_combined = nx.compose(G_email, G_call)
+            for node, data in G_combined.nodes(data=True):
+                if node in G_email and node in G_call:
+                    data['color'] = '#8f9aff'
+                elif node in G_email:
+                    data['color'] = '#427bff'
+                elif node in G_call:
+                    data['color'] = 'red'
+
+            for source, target, data in G_combined.edges(data=True):
+                if (source, target) in G_email.edges() and (source, target) in G_call.edges():
+                    data['color'] = '#8f9aff'
+                elif (source, target) in G_email.edges():
+                    data['color'] = '#427bff'
+                elif (source, target) in G_call.edges():
+                    data['color'] = 'red'
+
         elif "Instant Messages" in selected_options and "Call" in selected_options:
             G_combined = nx.compose(G_instant_messages, G_call)
+            for node, data in G_combined.nodes(data=True):
+                if node in G_instant_messages and node in G_call:
+                    data['color'] = 'orange'
+                elif node in G_instant_messages:
+                    data['color'] = 'yellow'
+                elif node in G_call:
+                    data['color'] = 'red'
+
+            for source, target, data in G_combined.edges(data=True):
+                if (source, target) in G_instant_messages.edges() and (source, target) in G_call.edges():
+                    data['color'] = 'orange'
+                elif (source, target) in G_instant_messages.edges():
+                    data['color'] = 'yellow'
+                elif (source, target) in G_call.edges():
+                    data['color'] = 'red'
 
     elif len(selected_options) == 1:  # Any one option selected
         if "Email" in selected_options:
             G_combined = G_email
+            for node, data in G_combined.nodes(data=True):
+                if node in G_email:
+                        data['color'] = '#427bff'
+            for source, target, data in G_combined.edges(data=True):
+                if (source, target) in G_email.edges():
+                    data['color'] = '#427bff'
+
         elif "Instant Messages" in selected_options:
             G_combined = G_instant_messages
+            for node, data in G_combined.nodes(data=True):
+                if node in G_instant_messages:
+                        data['color'] = 'yellow'
+            for source, target, data in G_combined.edges(data=True):
+                if (source, target) in G_call.edges():
+                    data['color'] = 'yellow'
+
         elif "Call" in selected_options:
             G_combined = G_call
+            for node, data in G_combined.nodes(data=True):
+                if node in G_call:
+                        data['color'] = 'red'
+            for source, target, data in G_combined.edges(data=True):
+                if (source, target) in G_call.edges():
+                    data['color'] = 'red'
 
     # Initiate PyVis network object
     combined_net = Network(
@@ -149,3 +247,18 @@ if uploaded_file is not None:
     # Load HTML file in HTML component for display on Streamlit page
     components.html(HtmlFile.read(), height=470)
 
+    legend_html = """
+    <div style="background-color: black; padding: 10px; border-radius: 5px;">
+        <h3>Legend</h3>
+        <ul>
+            <li><span style="color: #427bff;">Email</span></li>
+            <li><span style="color: yellow;">Instant Messages</span></li>
+            <li><span style="color: red;">Call</span></li>
+            <li><span style="color: green;">Email and Instant Messages</span></li>
+            <li><span style="color: #8f9aff;">Email and Call</span></li>
+            <li><span style="color: orange;">Instant Messages and Call</span></li>
+            <li><span style="color: #5c5c5c;">All</span></li>
+        </ul>
+    </div>
+    """
+    st.markdown(legend_html, unsafe_allow_html=True)
