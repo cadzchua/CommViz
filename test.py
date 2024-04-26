@@ -4,6 +4,7 @@ import pandas as pd
 import networkx as nx
 from pyvis.network import Network
 import re, os
+from io import BytesIO
 
 def extract_emails(text):
     match = re.search(r'(.+@[A-Za-z]+.com)', str(text))
@@ -24,210 +25,251 @@ def extract_phone(parties):
     else:
         return None, None
     
-def extract_phone_number(text):
+def extract_info(text):
     match = re.search(r'\b(\d{4,})\b', str(text))
     if match:
         return match.group(1)
     else:
-        return None
+        match2 = re.search(r'\b([A-Za-z0-9]{10,})\b', str(text))
+        if match2:
+          return match2.group(1)
+        else:
+          return None
     
-uploaded_file = st.sidebar.file_uploader("Upload your input xls file", type=["xls", "xlsx"])
-if uploaded_file is not None:
-    xls = pd.ExcelFile(uploaded_file)
+def parse_xls_file(uploaded_file):
+    try:
+        xls = pd.ExcelFile(uploaded_file)
+        device_info = xls.parse("Device Information", header=1)
+    except:
+        device_info = None
+    try:
+        call_log = xls.parse("Call Log", header=1)
+    except:
+        call_log = None
+    try:
+        instant_msgs = xls.parse("Instant Messages", header=1)
+    except:
+        instant_msgs = None
+    try:
+        emails = xls.parse("Emails", header=1)
+    except:
+        emails = None
+    return device_info, call_log, instant_msgs, emails
 
-    # Device Information
-    device_info = xls.parse("Device Information", header=1)
-    device_info['Name'] = device_info['Name'].str.strip()
-    android_id = device_info[device_info["Name"] == "Android ID"]['Value'] # Extracted User Device ID
 
-    # Call Log
-    call_log = xls.parse("Call Log", header=1)
-    call_log['Phone (From:)'], call_log['Phone (To:)'] = zip(*call_log['Parties'].apply(extract_phone))
-    call_log.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
-    call_log['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
-    call_log['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)
-    call_log['to_from_tuple'] = list(zip(call_log['Phone (From:)'], call_log['Phone (To:)']))
-    tuple_counts = call_log['to_from_tuple'].value_counts()
-    df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
-    for (from_num, to_num), count in tuple_counts.items():
-        df_call.loc[len(df_call)] = [from_num, to_num, count**0.66]
+network_graphs = []
+uploaded_files = st.sidebar.file_uploader("Upload your input xls file", type=["xls", "xlsx"], accept_multiple_files=True)
 
-    # Instant Messages
-    instant_msgs = call_log = xls.parse("Instant Messages", header=1)
-    instant_msgs['Phone (From:)'] = instant_msgs['From'].apply(extract_phone_number)
-    instant_msgs['Phone (To:)'] = instant_msgs['To'].apply(extract_phone_number)
-    instant_msgs.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
-    instant_msgs['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)
-    instant_msgs['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
-    instant_msgs['to_from_tuple'] = list(zip(instant_msgs['Phone (From:)'], instant_msgs['Phone (To:)']))
-    tuple_counts2 = instant_msgs['to_from_tuple'].value_counts()
-    df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
-    for (from_num, to_num), count in tuple_counts2.items():
-        df_imsg.loc[len(df_imsg)] = [from_num, to_num, count**0.66]
-
-    # Emails
-    emails = xls.parse("Emails", header=1)
-    emails['Email (From:)'] = emails['From'].apply(extract_emails)
-    emails['Email (To:)'] = emails['To'].apply(extract_emails)
-    emails.dropna(subset=['Email (From:)', 'Email (To:)'], how='all', inplace=True)
-    emails['Email (From:)'].fillna(android_id.iloc[0], inplace=True)
-    emails['Email (To:)'].fillna(android_id.iloc[0], inplace=True)
-    all_emails = set(emails['Email (To:)'].dropna()) | set(emails['Email (From:)'].dropna())
-    emails['to_from_tuple'] = list(zip(emails['Email (From:)'], emails['Email (To:)']))
-    tuple_counts3 = emails['to_from_tuple'].value_counts()
-    df_email = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
-    for (from_num, to_num), count in tuple_counts3.items():
-        df_email.loc[len(df_email)] = [from_num, to_num, count**0.66]
+if uploaded_files is not None:
+    # if not isinstance(uploaded_files, list):
+    #     uploaded_files = [uploaded_files]
 
     # Set header title
     st.title('Network Graph Visualization')
-    
+
     # Define list of selection options and sort alphabetically
-    list = ['Call', 'Instant Messages', 'Email']
-    list.sort()
+    list_options = ['Call', 'Instant Messages', 'Email']
+    list_options.sort()
 
     # Implement multiselect dropdown menu for option selection (returns a list)
-    selected_options = st.multiselect('Select option(s) to visualize', list)
+    selected_options = st.multiselect('Select option(s) to visualize', list_options)
 
     heading_text = ", ".join(selected_options) + " Network"
     st.header(heading_text)
-    # Create networkx graph objects
-    G_email = nx.from_pandas_edgelist(df_email, 'from', 'to', 'weight')
-    G_instant_messages = nx.from_pandas_edgelist(df_imsg, 'from', 'to', 'weight')
-    G_call = nx.from_pandas_edgelist(df_call, 'from', 'to', 'weight')
+    df_email = pd.DataFrame(columns=['from', 'to', 'weight']) # Initialize an empty DataFrame
+    df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+    df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+    for uploaded_file in uploaded_files:
+        print(uploaded_file)
+        device_info, call_log, instant_msgs, emails = parse_xls_file(uploaded_file)
 
-    G_combined = nx.Graph()
-    if len(selected_options) == 0:
-        st.text('Choose at least 1 option to start')
+        # Device Information
+        if device_info is not None:
+            device_info['Name'] = device_info['Name'].str.strip()
+            android_id = device_info[device_info["Name"] == "Android ID"]['Value'] # Extracted User Device ID
 
-    elif len(selected_options) == 3:  # All three options selected
-        G_combined = nx.compose_all([G_email, G_instant_messages, G_call])
-        for node, data in G_combined.nodes(data=True):
-            if node in G_email and node in G_instant_messages and node in G_call:
-                data['color'] = '#5c5c5c'
-            elif node in G_email and node in G_instant_messages:
-                data['color'] = 'green'
-            elif node in G_email and node in G_call:
-                data['color'] = '#8f9aff'
-            elif node in G_instant_messages and node in G_call:
-                data['color'] = 'orange'
-            elif node in G_email:
-                data['color'] = '#427bff'
-            elif node in G_instant_messages:
-                data['color'] = 'yellow'
-            elif node in G_call:
-                data['color'] = 'red'
+        # Call Log
+        if call_log is not None:
+            call_log['Phone (From:)'], call_log['Phone (To:)'] = zip(*call_log['Parties'].apply(extract_phone))
+            call_log.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
+            call_log['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
+            call_log['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)
+            call_log['to_from_tuple'] = list(zip(call_log['Phone (From:)'], call_log['Phone (To:)']))
+            tuple_counts = call_log['to_from_tuple'].value_counts()
+            df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+            for (from_num, to_num), count in tuple_counts.items():
+                df_call.loc[len(df_call)] = [from_num, to_num, count**0.5]
 
-        for source, target, data in G_combined.edges(data=True):
-            if (source, target) in G_email.edges() and (source, target) in G_instant_messages.edges() and (source, target) in G_call.edges():
-                data['color'] = '#5c5c5c'
-            elif (source, target) in G_email.edges() and (source, target) in G_instant_messages.edges():
-                data['color'] = 'green'
-            elif (source, target) in G_email.edges() and (source, target) in G_call.edges():
-                data['color'] = '#8f9aff'
-            elif (source, target) in G_instant_messages.edges() and (source, target) in G_call.edges():
-                data['color'] = 'orange'
-            elif (source, target) in G_email.edges():
-                data['color'] = '#427bff'
-            elif (source, target) in G_instant_messages.edges():
-                data['color'] = 'yellow'
-            elif (source, target) in G_call.edges():
-                data['color'] = 'red'
+        # Instant Messages
+        if instant_msgs is not None:
+            instant_msgs['Phone (From:)'] = instant_msgs['From'].apply(extract_info)
+            instant_msgs['Phone (To:)'] = instant_msgs['To'].apply(extract_info)
+            instant_msgs.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
+            instant_msgs['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)
+            instant_msgs['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
+            instant_msgs['to_from_tuple'] = list(zip(instant_msgs['Phone (From:)'], instant_msgs['Phone (To:)']))
+            tuple_counts2 = instant_msgs['to_from_tuple'].value_counts()
+            df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+            for (from_num, to_num), count in tuple_counts2.items():
+                df_imsg.loc[len(df_imsg)] = [from_num, to_num, count**0.5]
 
-    elif len(selected_options) == 2:  # Any two options selected
-        if "Email" in selected_options and "Instant Messages" in selected_options:
-            G_combined = nx.compose(G_email, G_instant_messages)
+        # Emails
+        if emails is not None:
+            emails['Email (From:)'] = emails['From'].apply(extract_emails)
+            emails['Email (To:)'] = emails['To'].apply(extract_emails)
+            emails.dropna(subset=['Email (From:)', 'Email (To:)'], how='all', inplace=True)
+            emails['Email (From:)'].fillna(android_id.iloc[0], inplace=True)
+            emails['Email (To:)'].fillna(android_id.iloc[0], inplace=True)
+            all_emails = set(emails['Email (To:)'].dropna()) | set(emails['Email (From:)'].dropna())
+            emails['to_from_tuple'] = list(zip(emails['Email (From:)'], emails['Email (To:)']))
+            tuple_counts3 = emails['to_from_tuple'].value_counts()
+            df_email = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+            for (from_num, to_num), count in tuple_counts3.items():
+                df_email.loc[len(df_email)] = [from_num, to_num, count**0.5]
+
+        # Create networkx graph objects
+        G_email = nx.from_pandas_edgelist(df_email, 'from', 'to', 'weight')
+        G_instant_messages = nx.from_pandas_edgelist(df_imsg, 'from', 'to', 'weight')
+        G_call = nx.from_pandas_edgelist(df_call, 'from', 'to', 'weight')
+
+        G_combined = nx.Graph()
+        if len(selected_options) == 0:
+            st.text('Choose at least 1 option to start')
+
+        elif len(selected_options) == 3:  # All three options selected
+            G_combined = nx.compose_all([G_email, G_instant_messages, G_call])
             for node, data in G_combined.nodes(data=True):
-                if node in G_email and node in G_instant_messages:
+                if node in G_email and node in G_instant_messages and node in G_call:
+                    data['color'] = '#5c5c5c'
+                elif node in G_email and node in G_instant_messages:
                     data['color'] = 'green'
+                elif node in G_email and node in G_call:
+                    data['color'] = '#8f9aff'
+                elif node in G_instant_messages and node in G_call:
+                    data['color'] = 'orange'
                 elif node in G_email:
                     data['color'] = '#427bff'
                 elif node in G_instant_messages:
-                    data['color'] = 'yellow'
-
-            for source, target, data in G_combined.edges(data=True):
-                if (source, target) in G_email.edges() and (source, target) in G_instant_messages.edges():
-                    data['color'] = 'green'
-                elif (source, target) in G_email.edges():
-                    data['color'] = '#427bff'
-                elif (source, target) in G_instant_messages.edges():
-                    data['color'] = 'yellow'
-                
-        elif "Email" in selected_options and "Call" in selected_options:
-            G_combined = nx.compose(G_email, G_call)
-            for node, data in G_combined.nodes(data=True):
-                if node in G_email and node in G_call:
-                    data['color'] = '#8f9aff'
-                elif node in G_email:
-                    data['color'] = '#427bff'
+                    data['color'] = '#999403'
                 elif node in G_call:
                     data['color'] = 'red'
 
             for source, target, data in G_combined.edges(data=True):
-                if (source, target) in G_email.edges() and (source, target) in G_call.edges():
+                if (source, target) in G_email.edges() and (source, target) in G_instant_messages.edges() and (source, target) in G_call.edges():
+                    data['color'] = '#5c5c5c'
+                elif (source, target) in G_email.edges() and (source, target) in G_instant_messages.edges():
+                    data['color'] = 'green'
+                elif (source, target) in G_email.edges() and (source, target) in G_call.edges():
                     data['color'] = '#8f9aff'
+                elif (source, target) in G_instant_messages.edges() and (source, target) in G_call.edges():
+                    data['color'] = 'orange'
                 elif (source, target) in G_email.edges():
                     data['color'] = '#427bff'
-                elif (source, target) in G_call.edges():
-                    data['color'] = 'red'
-
-        elif "Instant Messages" in selected_options and "Call" in selected_options:
-            G_combined = nx.compose(G_instant_messages, G_call)
-            for node, data in G_combined.nodes(data=True):
-                if node in G_instant_messages and node in G_call:
-                    data['color'] = 'orange'
-                elif node in G_instant_messages:
-                    data['color'] = 'yellow'
-                elif node in G_call:
-                    data['color'] = 'red'
-
-            for source, target, data in G_combined.edges(data=True):
-                if (source, target) in G_instant_messages.edges() and (source, target) in G_call.edges():
-                    data['color'] = 'orange'
                 elif (source, target) in G_instant_messages.edges():
-                    data['color'] = 'yellow'
+                    data['color'] = '#999403'
                 elif (source, target) in G_call.edges():
                     data['color'] = 'red'
 
-    elif len(selected_options) == 1:  # Any one option selected
-        if "Email" in selected_options:
-            G_combined = G_email
-            for node, data in G_combined.nodes(data=True):
-                if node in G_email:
+        elif len(selected_options) == 2:  # Any two options selected
+            if "Email" in selected_options and "Instant Messages" in selected_options:
+                G_combined = nx.compose(G_email, G_instant_messages)
+                for node, data in G_combined.nodes(data=True):
+                    if node in G_email and node in G_instant_messages:
+                        data['color'] = 'green'
+                    elif node in G_email:
                         data['color'] = '#427bff'
-            for source, target, data in G_combined.edges(data=True):
-                if (source, target) in G_email.edges():
-                    data['color'] = '#427bff'
+                    elif node in G_instant_messages:
+                        data['color'] = '#999403'
 
-        elif "Instant Messages" in selected_options:
-            G_combined = G_instant_messages
-            for node, data in G_combined.nodes(data=True):
-                if node in G_instant_messages:
-                        data['color'] = 'yellow'
-            for source, target, data in G_combined.edges(data=True):
-                if (source, target) in G_call.edges():
-                    data['color'] = 'yellow'
-
-        elif "Call" in selected_options:
-            G_combined = G_call
-            for node, data in G_combined.nodes(data=True):
-                if node in G_call:
+                for source, target, data in G_combined.edges(data=True):
+                    if (source, target) in G_email.edges() and (source, target) in G_instant_messages.edges():
+                        data['color'] = 'green'
+                    elif (source, target) in G_email.edges():
+                        data['color'] = '#427bff'
+                    elif (source, target) in G_instant_messages.edges():
+                        data['color'] = '#999403'
+                    
+            elif "Email" in selected_options and "Call" in selected_options:
+                G_combined = nx.compose(G_email, G_call)
+                for node, data in G_combined.nodes(data=True):
+                    if node in G_email and node in G_call:
+                        data['color'] = '#8f9aff'
+                    elif node in G_email:
+                        data['color'] = '#427bff'
+                    elif node in G_call:
                         data['color'] = 'red'
-            for source, target, data in G_combined.edges(data=True):
-                if (source, target) in G_call.edges():
-                    data['color'] = 'red'
 
+                for source, target, data in G_combined.edges(data=True):
+                    if (source, target) in G_email.edges() and (source, target) in G_call.edges():
+                        data['color'] = '#8f9aff'
+                    elif (source, target) in G_email.edges():
+                        data['color'] = '#427bff'
+                    elif (source, target) in G_call.edges():
+                        data['color'] = 'red'
+
+            elif "Instant Messages" in selected_options and "Call" in selected_options:
+                G_combined = nx.compose(G_instant_messages, G_call)
+                for node, data in G_combined.nodes(data=True):
+                    if node in G_instant_messages and node in G_call:
+                        data['color'] = 'orange'
+                    elif node in G_instant_messages:
+                        data['color'] = '#999403'
+                    elif node in G_call:
+                        data['color'] = 'red'
+
+                for source, target, data in G_combined.edges(data=True):
+                    if (source, target) in G_instant_messages.edges() and (source, target) in G_call.edges():
+                        data['color'] = 'orange'
+                    elif (source, target) in G_instant_messages.edges():
+                        data['color'] = '#999403'
+                    elif (source, target) in G_call.edges():
+                        data['color'] = 'red'
+
+        elif len(selected_options) == 1:  # Any one option selected
+            if "Email" in selected_options:
+                G_combined = G_email
+                for node, data in G_combined.nodes(data=True):
+                    if node in G_email:
+                            data['color'] = '#427bff'
+                for source, target, data in G_combined.edges(data=True):
+                    if (source, target) in G_email.edges():
+                        data['color'] = '#427bff'
+
+            elif "Instant Messages" in selected_options:
+                G_combined = G_instant_messages
+                for node, data in G_combined.nodes(data=True):
+                    if node in G_instant_messages:
+                            data['color'] = '#999403'
+                for source, target, data in G_combined.edges(data=True):
+                    if (source, target) in G_call.edges():
+                        data['color'] = '#999403'
+
+            elif "Call" in selected_options:
+                G_combined = G_call
+                for node, data in G_combined.nodes(data=True):
+                    if node in G_call:
+                            data['color'] = 'red'
+                for source, target, data in G_combined.edges(data=True):
+                    if (source, target) in G_call.edges():
+                        data['color'] = 'red'
+        network_graphs.append(G_combined)
+
+    network_graphs_sorted = sorted(network_graphs, key=lambda G: G.number_of_edges())
+    # Compose the graphs from the least edges to the most
+    G_combined = nx.compose_all(network_graphs_sorted)
+    
     # Initiate PyVis network object
     combined_net = Network(
                     height='450px',
                     width='100%',
-                    bgcolor='#121925',
+                    bgcolor='black',
                     font_color='white',
                     directed=True
                     )
 
     # Take Networkx graph and translate it to a PyVis graph format
     combined_net.from_nx(G_combined)
+    combined_net.set_edge_smooth('dynamic')
 
     # Generate network with specific layout settings
     combined_net.repulsion(
@@ -252,7 +294,7 @@ if uploaded_file is not None:
         <h3>Legend</h3>
         <ul>
             <li><span style="color: #427bff;">Email</span></li>
-            <li><span style="color: yellow;">Instant Messages</span></li>
+            <li><span style="color: #7a7600;">Instant Messages</span></li>
             <li><span style="color: red;">Call</span></li>
             <li><span style="color: green;">Email and Instant Messages</span></li>
             <li><span style="color: #8f9aff;">Email and Call</span></li>
