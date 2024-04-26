@@ -60,10 +60,7 @@ def parse_xls_file(uploaded_file):
 network_graphs = []
 uploaded_files = st.sidebar.file_uploader("Upload your input xls file", type=["xls", "xlsx"], accept_multiple_files=True)
 
-if uploaded_files is not None:
-    # if not isinstance(uploaded_files, list):
-    #     uploaded_files = [uploaded_files]
-
+if uploaded_files:
     # Set header title
     st.title('Network Graph Visualization')
 
@@ -80,7 +77,6 @@ if uploaded_files is not None:
     df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
     df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
     for uploaded_file in uploaded_files:
-        print(uploaded_file)
         device_info, call_log, instant_msgs, emails = parse_xls_file(uploaded_file)
 
         # Device Information
@@ -260,16 +256,15 @@ if uploaded_files is not None:
     
     # Initiate PyVis network object
     combined_net = Network(
-                    height='450px',
-                    width='100%',
-                    bgcolor='black',
+                    # height='450px',
+                    # width='100%',
+                    # bgcolor='black',
                     font_color='white',
                     directed=True
                     )
 
     # Take Networkx graph and translate it to a PyVis graph format
     combined_net.from_nx(G_combined)
-    combined_net.set_edge_smooth('dynamic')
 
     # Generate network with specific layout settings
     combined_net.repulsion(
@@ -294,7 +289,7 @@ if uploaded_files is not None:
         <h3>Legend</h3>
         <ul>
             <li><span style="color: #427bff;">Email</span></li>
-            <li><span style="color: #7a7600;">Instant Messages</span></li>
+            <li><span style="color: #999403;">Instant Messages</span></li>
             <li><span style="color: red;">Call</span></li>
             <li><span style="color: green;">Email and Instant Messages</span></li>
             <li><span style="color: #8f9aff;">Email and Call</span></li>
@@ -304,3 +299,5 @@ if uploaded_files is not None:
     </div>
     """
     st.markdown(legend_html, unsafe_allow_html=True)
+else:
+    st.text("Please Upload A File.")
