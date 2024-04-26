@@ -24,6 +24,13 @@ def extract_phone(parties):
     else:
         return None, None
     
+def extract_phone_number(text):
+    match = re.search(r'\b(\d{4,})\b', str(text))
+    if match:
+        return match.group(1)
+    else:
+        return None
+    
 uploaded_file = st.sidebar.file_uploader("Upload your input xls file", type=["xls", "xlsx"])
 if uploaded_file is not None:
     xls = pd.ExcelFile(uploaded_file)
@@ -32,6 +39,31 @@ if uploaded_file is not None:
     device_info = xls.parse("Device Information", header=1)
     device_info['Name'] = device_info['Name'].str.strip()
     android_id = device_info[device_info["Name"] == "Android ID"]['Value'] # Extracted User Device ID
+
+    # Call Log
+    call_log = xls.parse("Call Log", header=1)
+    call_log['Phone (From:)'], call_log['Phone (To:)'] = zip(*call_log['Parties'].apply(extract_phone))
+    call_log.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
+    call_log['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
+    call_log['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)
+    call_log['to_from_tuple'] = list(zip(call_log['Phone (From:)'], call_log['Phone (To:)']))
+    tuple_counts = call_log['to_from_tuple'].value_counts()
+    df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+    for (from_num, to_num), count in tuple_counts.items():
+        df_call.loc[len(df_call)] = [from_num, to_num, count**0.5]
+
+    # Instant Messages
+    instant_msgs = call_log = xls.parse("Instant Messages", header=1)
+    instant_msgs['Phone (From:)'] = instant_msgs['From'].apply(extract_phone_number)
+    instant_msgs['Phone (To:)'] = instant_msgs['To'].apply(extract_phone_number)
+    instant_msgs.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
+    instant_msgs['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)
+    instant_msgs['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
+    instant_msgs['to_from_tuple'] = list(zip(instant_msgs['Phone (From:)'], instant_msgs['Phone (To:)']))
+    tuple_counts2 = instant_msgs['to_from_tuple'].value_counts()
+    df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+    for (from_num, to_num), count in tuple_counts2.items():
+        df_imsg.loc[len(df_imsg)] = [from_num, to_num, count**0.5]
 
     # Emails
     emails = xls.parse("Emails", header=1)
@@ -59,86 +91,61 @@ if uploaded_file is not None:
 
     heading_text = ", ".join(selected_options) + " Network"
     st.header(heading_text)
-    # Set info message on initial site load
+    # Create networkx graph objects
+    G_email = nx.from_pandas_edgelist(df_email, 'from', 'to', 'weight')
+    G_instant_messages = nx.from_pandas_edgelist(df_imsg, 'from', 'to', 'weight')
+    G_call = nx.from_pandas_edgelist(df_call, 'from', 'to', 'weight')
+
+    G_combined = nx.Graph()
     if len(selected_options) == 0:
         st.text('Choose at least 1 option to start')
 
-    # Create network graph when user selects >= 1 item
-    else:
-            # Check if both 'Email' and 'Instant Messages' are selected
+    elif len(selected_options) == 3:  # All three options selected
+        G_combined = nx.compose_all([G_email, G_instant_messages, G_call])
+
+    elif len(selected_options) == 2:  # Any two options selected
         if "Email" in selected_options and "Instant Messages" in selected_options:
-            # Create networkx graph object from pandas dataframe for email
-            G_email = nx.from_pandas_edgelist(df_email, 'from', 'to', 'weight')
-            
-            # Create networkx graph object from pandas dataframe for instant messages
-            G_instant_messages = nx.from_pandas_edgelist(df_instant_messages, 'from', 'to', 'weight')
-            
-            # Combine the two graphs
             G_combined = nx.compose(G_email, G_instant_messages)
-            
-            # Initiate PyVis network object
-            combined_net = Network(
-                            height='450px',
-                            width='100%',
-                            bgcolor='#121925',
-                            font_color='white',
-                            directed=True
-                            )
+        elif "Email" in selected_options and "Call" in selected_options:
+            G_combined = nx.compose(G_email, G_call)
+        elif "Instant Messages" in selected_options and "Call" in selected_options:
+            G_combined = nx.compose(G_instant_messages, G_call)
 
-            # Take Networkx graph and translate it to a PyVis graph format
-            combined_net.from_nx(G_combined)
-
-            # Generate network with specific layout settings
-            combined_net.repulsion(
-                                node_distance=420,
-                                central_gravity=0.33,
-                                spring_length=110,
-                                spring_strength=0.10,
-                                damping=0.95
-                            )
-
-            # Save and read graph as HTML file (on Streamlit Sharing)
-            
-            path = 'tmp'
-            if not os.path.exists(path):
-                os.makedirs(path)
-            combined_net.save_graph(f'{path}/pyvis_combined_graph.html')
-            HtmlFile = open(f'{path}/pyvis_combined_graph.html', 'r', encoding='utf-8')
-            # Load HTML file in HTML component for display on Streamlit page
-            components.html(HtmlFile.read(), height=470)
-
+    elif len(selected_options) == 1:  # Any one option selected
         if "Email" in selected_options:
-        # Create networkx graph object from pandas dataframe
-            G_email = nx.from_pandas_edgelist(m, 'from', 'to', 'weight')
-            
-            # Initiate PyVis network object
-            email_net = Network(
-                            height='450px',
-                            width='100%',
-                            bgcolor='#121925',
-                            font_color='white',
-                            directed=True
-                            )
+            G_combined = G_email
+        elif "Instant Messages" in selected_options:
+            G_combined = G_instant_messages
+        elif "Call" in selected_options:
+            G_combined = G_call
 
-            # Take Networkx graph and translate it to a PyVis graph format
-            email_net.from_nx(G_email)
+    # Initiate PyVis network object
+    combined_net = Network(
+                    height='450px',
+                    width='100%',
+                    bgcolor='#121925',
+                    font_color='white',
+                    directed=True
+                    )
 
-            # Generate network with specific layout settings
-            email_net.repulsion(
-                                node_distance=420,
-                                central_gravity=0.33,
-                                spring_length=110,
-                                spring_strength=0.10,
-                                damping=0.95
-                            )
+    # Take Networkx graph and translate it to a PyVis graph format
+    combined_net.from_nx(G_combined)
 
-            # Save and read graph as HTML file (on Streamlit Sharing)
-            
-            path = 'tmp'
-            if not os.path.exists(path):
-                os.makedirs(path)
-            email_net.save_graph(f'{path}/pyvis_graph.html')
-            HtmlFile = open(f'{path}/pyvis_graph.html', 'r', encoding='utf-8')
-            # Load HTML file in HTML component for display on Streamlit page
-            components.html(HtmlFile.read(), height=470)
+    # Generate network with specific layout settings
+    combined_net.repulsion(
+                        node_distance=420,
+                        central_gravity=0.33,
+                        spring_length=110,
+                        spring_strength=0.10,
+                        damping=0.95
+                    )
+
+    # Save and read graph as HTML file (on Streamlit Sharing)
+    path = 'tmp'
+    if not os.path.exists(path):
+        os.makedirs(path)
+    combined_net.save_graph(f'{path}/pyvis_combined_graph.html')
+    HtmlFile = open(f'{path}/pyvis_combined_graph.html', 'r', encoding='utf-8')
+    # Load HTML file in HTML component for display on Streamlit page
+    components.html(HtmlFile.read(), height=470)
 
