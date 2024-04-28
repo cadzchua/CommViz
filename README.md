@@ -32,6 +32,8 @@ If the window did not open up, head over to the URL shown after running `streaml
 
 The URL shown should look like the following.
 
+Graph is **interactive**, users are able to **move the nodes around**.
+
 ### Stop the file
 Press <kbd>Ctrl</kbd> + <kbd>C</kbd> (Keyboard Interrupt) in the terminal to stop the streamlit app from running.
 ## Contributing
