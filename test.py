@@ -44,6 +44,27 @@ def extract_info(text):
         else:
           return None
     
+def filter_subgraph(G_combined, nodes):
+    """  
+    This function creates and returns a subgraph containing only the relevant nodes and edges.
+    """
+    subgraph_nodes = []
+    subgraph_edges = []
+
+    # Loop through each node in the list of nodes
+    for node in nodes:
+        # Filter nodes based on the provided node value (case insensitive)
+        subgraph_nodes.extend([n for n in G_combined.nodes() if node.lower() in str(n).lower()])
+        # Filter edges connected to the filtered nodes
+        subgraph_edges.extend([(u, v) for u, v in G_combined.edges() if u in subgraph_nodes or v in subgraph_nodes])
+
+    # Remove duplicate nodes and edges
+    subgraph_nodes = list(set(subgraph_nodes))
+    subgraph_edges = list(set(subgraph_edges))
+
+    # Create and return the subgraph
+    return G_combined.subgraph(subgraph_nodes).copy(), subgraph_edges
+    
 def parse_xls_file(uploaded_file):
     """  
     This functions reads the xlsx/xls file and return the relevant sheets interested.
@@ -81,7 +102,8 @@ if uploaded_files:
 
     # Implement multiselect dropdown menu for option selection (returns a list)
     selected_options = st.multiselect('Select option(s) to visualize', list_options)
-
+    search_node = st.text_input("Search Node", placeholder='Input node(s) separated with commas')
+    node_list = [node.strip() for node in search_node.split(',') if node.strip()]
     heading_text = ", ".join(selected_options) + " Network"
     st.header(heading_text)
     output_list = []
@@ -276,10 +298,20 @@ if uploaded_files:
         network_graphs.append(G_combined)
 
     network_graphs_sorted = sorted(network_graphs, key=lambda G: G.number_of_edges())
-    # Compose the graphs from the least edges to the most
     G_combined = nx.compose_all(network_graphs_sorted)
-    
-    # Initiate PyVis network object
+    if search_node:
+        all_neighbors = []
+        
+        for node in node_list:
+            # Get the neighbors of the all the nodes
+            try:
+                neighbors = list(G_combined.neighbors(node))
+                all_neighbors.extend(neighbors)
+            except nx.exception.NetworkXError:
+                st.write(f"Node {node} is not in the graph.")
+        nodes_to_plot = all_neighbors + [search_node]
+        G_combined = G_combined.subgraph(nodes_to_plot)
+
     combined_net = Network(
                     height='450px',
                     width='100%',
@@ -288,10 +320,7 @@ if uploaded_files:
                     directed=True
                     )
 
-    # Take Networkx graph and translate it to a PyVis graph format
     combined_net.from_nx(G_combined)
-
-    # Generate network with specific layout settings
     combined_net.repulsion(
                         node_distance=420,
                         central_gravity=0.33,
@@ -307,7 +336,6 @@ if uploaded_files:
     combined_net.save_graph(f'{path}/pyvis_combined_graph.html')
     HtmlFile = open(f'{path}/pyvis_combined_graph.html', 'r', encoding='utf-8')
 
-    # Load HTML file in HTML component for display on Streamlit page
     components.html(HtmlFile.read(), height=470)
 
     legend_html = """
