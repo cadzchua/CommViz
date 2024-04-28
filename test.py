@@ -6,6 +6,9 @@ from pyvis.network import Network
 import re, os
 
 def extract_emails(text):
+    """
+    This function extracts emails from text.
+    """
     match = re.search(r'(.+@[A-Za-z]+.com)', str(text))
     if match:
         return match.group(1)
@@ -13,6 +16,9 @@ def extract_emails(text):
         return None
     
 def extract_phone(parties):
+    """
+    This function extracts phone numbers after "From: " and "To: " keywords.
+    """
     match_to = re.search(r'To:\s*\+*(\d+)', parties)
     match_from = re.search(r'From:\s*\+*(\d+)', parties)
     if match_to and match_from:
@@ -25,6 +31,9 @@ def extract_phone(parties):
         return None, None
     
 def extract_info(text):
+    """  
+    This function extracts phone numbers or android/phone ID if there is no phone number to be extracted.
+    """
     match = re.search(r'\b(\d{4,})\b', str(text))
     if match:
         return match.group(1)
@@ -36,6 +45,9 @@ def extract_info(text):
           return None
     
 def parse_xls_file(uploaded_file):
+    """  
+    This functions reads the xlsx/xls file and return the relevant sheets interested.
+    """
     try:
         xls = pd.ExcelFile(uploaded_file)
         device_info = xls.parse("Device Information", header=1)
@@ -280,6 +292,7 @@ if uploaded_files:
         os.makedirs(path)
     combined_net.save_graph(f'{path}/pyvis_combined_graph.html')
     HtmlFile = open(f'{path}/pyvis_combined_graph.html', 'r', encoding='utf-8')
+
     # Load HTML file in HTML component for display on Streamlit page
     components.html(HtmlFile.read(), height=470)
 
