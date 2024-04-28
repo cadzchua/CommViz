@@ -4,7 +4,6 @@ import pandas as pd
 import networkx as nx
 from pyvis.network import Network
 import re, os
-from io import BytesIO
 
 def extract_emails(text):
     match = re.search(r'(.+@[A-Za-z]+.com)', str(text))
@@ -76,6 +75,8 @@ if uploaded_files:
     df_email = pd.DataFrame(columns=['from', 'to', 'weight']) # Initialize an empty DataFrame
     df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
     df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+    if len(selected_options) == 0:
+            st.text('Choose at least 1 option to start')
     for uploaded_file in uploaded_files:
         device_info, call_log, instant_msgs, emails = parse_xls_file(uploaded_file)
 
@@ -89,7 +90,7 @@ if uploaded_files:
             call_log['Phone (From:)'], call_log['Phone (To:)'] = zip(*call_log['Parties'].apply(extract_phone))
             call_log.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
             call_log['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
-            call_log['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)
+            call_log['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)    
             call_log['to_from_tuple'] = list(zip(call_log['Phone (From:)'], call_log['Phone (To:)']))
             tuple_counts = call_log['to_from_tuple'].value_counts()
             df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
@@ -129,10 +130,8 @@ if uploaded_files:
         G_call = nx.from_pandas_edgelist(df_call, 'from', 'to', 'weight')
 
         G_combined = nx.Graph()
-        if len(selected_options) == 0:
-            st.text('Choose at least 1 option to start')
-
-        elif len(selected_options) == 3:  # All three options selected
+        
+        if len(selected_options) == 3:  # All three options selected
             G_combined = nx.compose_all([G_email, G_instant_messages, G_call])
             for node, data in G_combined.nodes(data=True):
                 if node in G_email and node in G_instant_messages and node in G_call:
@@ -256,9 +255,9 @@ if uploaded_files:
     
     # Initiate PyVis network object
     combined_net = Network(
-                    # height='450px',
-                    # width='100%',
-                    # bgcolor='black',
+                    height='450px',
+                    width='100%',
+                    bgcolor='black',
                     font_color='white',
                     directed=True
                     )
