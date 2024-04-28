@@ -84,18 +84,23 @@ if uploaded_files:
 
     heading_text = ", ".join(selected_options) + " Network"
     st.header(heading_text)
+    output_list = []
+
     df_email = pd.DataFrame(columns=['from', 'to', 'weight']) # Initialize an empty DataFrame
     df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
     df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
     if len(selected_options) == 0:
             st.text('Choose at least 1 option to start')
     for uploaded_file in uploaded_files:
+        missing_sheets = []
         device_info, call_log, instant_msgs, emails = parse_xls_file(uploaded_file)
 
         # Device Information
         if device_info is not None:
             device_info['Name'] = device_info['Name'].str.strip()
             android_id = device_info[device_info["Name"] == "Android ID"]['Value'] # Extracted User Device ID
+        else:
+            missing_sheets.append("Device Information")
 
         # Call Log
         if call_log is not None:
@@ -108,6 +113,8 @@ if uploaded_files:
             df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
             for (from_num, to_num), count in tuple_counts.items():
                 df_call.loc[len(df_call)] = [from_num, to_num, count**0.5]
+        else:
+            missing_sheets.append("Call Log")
 
         # Instant Messages
         if instant_msgs is not None:
@@ -121,6 +128,8 @@ if uploaded_files:
             df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
             for (from_num, to_num), count in tuple_counts2.items():
                 df_imsg.loc[len(df_imsg)] = [from_num, to_num, count**0.5]
+        else:
+            missing_sheets.append("Instant Messages")
 
         # Emails
         if emails is not None:
@@ -135,7 +144,12 @@ if uploaded_files:
             df_email = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
             for (from_num, to_num), count in tuple_counts3.items():
                 df_email.loc[len(df_email)] = [from_num, to_num, count**0.5]
+        else:
+            missing_sheets.append("Emails")
 
+        if missing_sheets:
+            output_list.append(f"{uploaded_file.name} does not have the following sheet(s): {', '.join(missing_sheets)}")
+        
         # Create networkx graph objects
         G_email = nx.from_pandas_edgelist(df_email, 'from', 'to', 'weight')
         G_instant_messages = nx.from_pandas_edgelist(df_imsg, 'from', 'to', 'weight')
@@ -311,5 +325,6 @@ if uploaded_files:
     </div>
     """
     st.markdown(legend_html, unsafe_allow_html=True)
+    st.sidebar.markdown('\n\n'.join(output_list))
 else:
     st.text("Please Upload A File.")
