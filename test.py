@@ -102,11 +102,8 @@ if uploaded_files:
 
     # Implement multiselect dropdown menu for option selection (returns a list)
     selected_options = st.multiselect('Select option(s) to visualize', list_options)
-    search_node = st.text_input("Search Node", placeholder='Input node(s) separated with commas')
-    node_list = [node.strip() for node in search_node.split(',') if node.strip()]
-    heading_text = ", ".join(selected_options) + " Network"
-    st.header(heading_text)
     output_list = []
+    node_list = []
 
     df_email = pd.DataFrame(columns=['from', 'to', 'weight']) # Initialize an empty DataFrame
     df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
@@ -176,7 +173,11 @@ if uploaded_files:
         G_email = nx.from_pandas_edgelist(df_email, 'from', 'to', 'weight')
         G_instant_messages = nx.from_pandas_edgelist(df_imsg, 'from', 'to', 'weight')
         G_call = nx.from_pandas_edgelist(df_call, 'from', 'to', 'weight')
-
+        all_nodes = set()
+        all_nodes.update(G_email.nodes())
+        all_nodes.update(G_instant_messages.nodes())
+        all_nodes.update(G_call.nodes())
+        node_list.extend(all_nodes)
         G_combined = nx.Graph()
         
         if len(selected_options) == 3:  # All three options selected
@@ -297,19 +298,25 @@ if uploaded_files:
                         data['color'] = 'red'
         network_graphs.append(G_combined)
 
+    node_list = sorted(set(node_list))
+    search_node = st.multiselect("Select nodes", node_list)
+    print(search_node)
+    heading_text = ", ".join(selected_options) + " Network"
+    st.header(heading_text)
     network_graphs_sorted = sorted(network_graphs, key=lambda G: G.number_of_edges())
     G_combined = nx.compose_all(network_graphs_sorted)
     if search_node:
         all_neighbors = []
         
-        for node in node_list:
+        for node in search_node:
+            print(node)
             # Get the neighbors of the all the nodes
             try:
                 neighbors = list(G_combined.neighbors(node))
                 all_neighbors.extend(neighbors)
             except nx.exception.NetworkXError:
                 st.write(f"Node {node} is not in the graph.")
-        nodes_to_plot = all_neighbors + [search_node]
+        nodes_to_plot = all_neighbors + search_node
         G_combined = G_combined.subgraph(nodes_to_plot)
 
     combined_net = Network(
