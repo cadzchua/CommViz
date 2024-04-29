@@ -38,7 +38,7 @@ def extract_info(text):
     if match:
         return match.group(1)
     else:
-        match2 = re.search(r'\b([A-Za-z0-9]{10,})\b', str(text))
+        match2 = re.search(r'\b([A-Za-z0-9 ]{10,})\b', str(text))
         if match2:
           return match2.group(1)
         else:
@@ -96,10 +96,7 @@ def main():
     uploaded_files = st.sidebar.file_uploader("Upload your input xls file", type=["xls", "xlsx"], accept_multiple_files=True)
 
     if uploaded_files:
-        # Set header title
         st.title('Network Graph Visualization', anchor="")
-
-        # Define list of selection options and sort alphabetically
         list_options = ['Call', 'Instant Messages', 'Email']
         list_options.sort()
 
@@ -134,7 +131,7 @@ def main():
                 tuple_counts = call_log['to_from_tuple'].value_counts()
                 df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
                 for (from_num, to_num), count in tuple_counts.items():
-                    df_call.loc[len(df_call)] = [from_num, to_num, count**0.5]
+                    df_call.loc[len(df_call)] = [from_num, to_num, count**0.333]
             else:
                 missing_sheets.append("Call Log")
 
@@ -149,7 +146,7 @@ def main():
                 tuple_counts2 = instant_msgs['to_from_tuple'].value_counts()
                 df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
                 for (from_num, to_num), count in tuple_counts2.items():
-                    df_imsg.loc[len(df_imsg)] = [from_num, to_num, count**0.5]
+                    df_imsg.loc[len(df_imsg)] = [from_num, to_num, count**0.333]
             else:
                 missing_sheets.append("Instant Messages")
 
@@ -165,7 +162,7 @@ def main():
                 tuple_counts3 = emails['to_from_tuple'].value_counts()
                 df_email = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
                 for (from_num, to_num), count in tuple_counts3.items():
-                    df_email.loc[len(df_email)] = [from_num, to_num, count**0.5]
+                    df_email.loc[len(df_email)] = [from_num, to_num, count**0.333]
             else:
                 missing_sheets.append("Emails")
 
@@ -173,11 +170,10 @@ def main():
                 output_list.append(f"{uploaded_file.name} does not have the following sheet(s): {', '.join(missing_sheets)}")
             
             # Create networkx graph objects
-            G_email = nx.from_pandas_edgelist(df_email, 'from', 'to', 'weight')
-            G_instant_messages = nx.from_pandas_edgelist(df_imsg, 'from', 'to', 'weight')
-            G_call = nx.from_pandas_edgelist(df_call, 'from', 'to', 'weight')
-            
-            G_combined = nx.Graph()
+            G_email = nx.from_pandas_edgelist(df_email, source='from', target='to', edge_attr='weight', create_using=nx.DiGraph)
+            G_instant_messages = nx.from_pandas_edgelist(df_imsg, source='from', target='to', edge_attr='weight', create_using=nx.DiGraph)
+            G_call = nx.from_pandas_edgelist(df_call, source='from', target='to', edge_attr='weight', create_using=nx.DiGraph)
+            G_combined = nx.DiGraph()
             
             if len(selected_options) == 3:  # All three options selected
                 G_combined = nx.compose_all([G_email, G_instant_messages, G_call])
@@ -296,6 +292,10 @@ def main():
                         if (source, target) in G_call.edges():
                             data['color'] = 'red'
             network_graphs.append(G_combined)
+        
+        network_graphs_sorted = sorted(network_graphs, key=lambda G: G.number_of_edges())
+        G_combined = nx.compose_all(network_graphs_sorted)
+        G_combined = nx.DiGraph(G_combined)
         all_nodes = set()
         all_nodes.update(G_combined.nodes())
         node_list.extend(all_nodes)
@@ -303,21 +303,18 @@ def main():
         search_node = st.multiselect("Select nodes", node_list)
         heading_text = ", ".join(selected_options) + " Network"
         st.header(heading_text)
-        network_graphs_sorted = sorted(network_graphs, key=lambda G: G.number_of_edges())
-        G_combined = nx.compose_all(network_graphs_sorted)
+
         if search_node:
-            all_neighbors = []
-            
+            nodes_in_subgraph = set()
             for node in search_node:
-                # Get the neighbors of the all the nodes
                 try:
                     neighbors = list(G_combined.neighbors(node))
-                    all_neighbors.extend(neighbors)
+                    nodes_in_subgraph.add(node)
+                    nodes_in_subgraph.update(neighbors)
                 except nx.exception.NetworkXError:
                     st.write(f"Node {node} is not in the graph.")
-            nodes_to_plot = all_neighbors + search_node
-            G_combined = G_combined.subgraph(nodes_to_plot)
-
+            G_combined = G_combined.subgraph(nodes_in_subgraph)
+    
         combined_net = Network(
                         height='450px',
                         width='100%',
