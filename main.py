@@ -358,7 +358,16 @@ def main():
         st.markdown(legend_html, unsafe_allow_html=True)
         st.sidebar.markdown('\n\n'.join(output_list))
     else:
-        st.text("Please Upload A File.")
+        st.write("""
+                    # Network Graph Visualization
+                    ## Description
+                    Visualizing network(s) between contacts in various files by using 
+                    `Call Log`, `Device Information`, `Emails`, `Instant Messages`.
+
+                    Upload one or more xls/xlsx file(s) at the sidebar to see the network graph visualization.
+                """)
+        
+                
 
 if __name__ == "__main__":
     main()
