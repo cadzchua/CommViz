@@ -88,16 +88,6 @@ def parse_xls_file(uploaded_file):
     except:
         emails = None
     return device_info, call_log, instant_msgs, emails
-
-def translate_to_english(text):
-    try:
-        translator = Translator()
-        translated = translator.translate(text, dest='en')
-        return translated.text
-    except Exception as e:
-        # Handle other exceptions, print the error for debugging
-        print(f"An error occurred: {e}")
-        return text
     
 def main():
     """  
@@ -123,84 +113,85 @@ def main():
         G_email_list, G_call_list, G_instant_messages_list = [], [], []
         if len(selected_options) == 0:
                 st.text('Choose at least 1 option to start')
-            
-        for uploaded_file in uploaded_files:
-            missing_sheets = []
-            device_info, call_log, instant_msgs, emails = parse_xls_file(uploaded_file)
+        if len(selected_options):
+            for uploaded_file in uploaded_files:
+                missing_sheets = []
+                device_info, call_log, instant_msgs, emails = parse_xls_file(uploaded_file)
 
-            # Device Information
-            if device_info is not None:
-                device_info['Name'] = device_info['Name'].str.strip()
-                android_id = device_info[device_info["Name"] == "Android ID"]['Value'] # Extracted User Device ID
-            else:
-                missing_sheets.append("Device Information")
-                break
+                # Device Information
+                if device_info is not None:
+                    device_info['Name'] = device_info['Name'].str.strip()
+                    android_id = device_info[device_info["Name"] == "Android ID"]['Value'] # Extracted User Device ID
+                    if android_id.empty:
+                        missing_sheets.append("Device Information (does not have Android ID)")
+                else:
+                    missing_sheets.append("Device Information")
 
-            # Call Log
-            if call_log is not None:
-                call_log['Phone (From:)'], call_log['Phone (To:)'] = zip(*call_log['Parties'].apply(extract_phone))
-                call_log.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
-                call_log['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
-                call_log['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)    
-                call_log['to_from_tuple'] = list(zip(call_log['Phone (From:)'], call_log['Phone (To:)']))
-                tuple_counts = call_log['to_from_tuple'].value_counts()
-                df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
-                for (from_num, to_num), count in tuple_counts.items():
-                    df_call.loc[len(df_call)] = [from_num, to_num, math.log((count + 5)**0.5)]
-            else:
-                missing_sheets.append("Call Log")
+                if not android_id.empty:
+                    # Call Log
+                    if call_log is not None:
+                        call_log['Phone (From:)'], call_log['Phone (To:)'] = zip(*call_log['Parties'].apply(extract_phone))
+                        call_log.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
+                        call_log['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
+                        call_log['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)    
+                        call_log['to_from_tuple'] = list(zip(call_log['Phone (From:)'], call_log['Phone (To:)']))
+                        tuple_counts = call_log['to_from_tuple'].value_counts()
+                        df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+                        for (from_num, to_num), count in tuple_counts.items():
+                            df_call.loc[len(df_call)] = [from_num, to_num, math.log((count + 5)**0.5)]
+                    else:
+                        missing_sheets.append("Call Log")
 
-            # Instant Messages
-            if instant_msgs is not None:
-                instant_msgs['Phone (From:)'] = instant_msgs['From'].apply(extract_info)
-                instant_msgs['Phone (To:)'] = instant_msgs['To'].apply(extract_info)
-                instant_msgs.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
-                instant_msgs['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)
-                instant_msgs['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
-                instant_msgs['to_from_tuple'] = list(zip(instant_msgs['Phone (From:)'], instant_msgs['Phone (To:)']))
-                tuple_counts2 = instant_msgs['to_from_tuple'].value_counts()
-                df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
-                for (from_num, to_num), count in tuple_counts2.items():
-                    df_imsg.loc[len(df_imsg)] = [from_num, to_num, math.log((count + 5)**0.5)]
-            else:
-                missing_sheets.append("Instant Messages")
+                    # Instant Messages
+                    if instant_msgs is not None:
+                        instant_msgs['Phone (From:)'] = instant_msgs['From'].apply(extract_info)
+                        instant_msgs['Phone (To:)'] = instant_msgs['To'].apply(extract_info)
+                        instant_msgs.dropna(subset=['Phone (From:)', 'Phone (To:)'], how='all', inplace=True)
+                        instant_msgs['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)
+                        instant_msgs['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
+                        instant_msgs['to_from_tuple'] = list(zip(instant_msgs['Phone (From:)'], instant_msgs['Phone (To:)']))
+                        tuple_counts2 = instant_msgs['to_from_tuple'].value_counts()
+                        df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+                        for (from_num, to_num), count in tuple_counts2.items():
+                            df_imsg.loc[len(df_imsg)] = [from_num, to_num, math.log((count + 5)**0.5)]
+                    else:
+                        missing_sheets.append("Instant Messages")
 
-            # Emails
-            if emails is not None:
-                emails['Email (From:)'] = emails['From'].apply(extract_emails)
-                emails['Email (To:)'] = emails['To'].apply(extract_emails)
-                emails.dropna(subset=['Email (From:)', 'Email (To:)'], how='all', inplace=True)
-                emails['Email (From:)'].fillna(android_id.iloc[0], inplace=True)
-                emails['Email (To:)'].fillna(android_id.iloc[0], inplace=True)
-                all_emails = set(emails['Email (To:)'].dropna()) | set(emails['Email (From:)'].dropna())
-                emails['to_from_tuple'] = list(zip(emails['Email (From:)'], emails['Email (To:)']))
-                tuple_counts3 = emails['to_from_tuple'].value_counts()
-                df_email = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
-                for (from_num, to_num), count in tuple_counts3.items():
-                    df_email.loc[len(df_email)] = [from_num, to_num, math.log((count + 5)**0.5)]
-            else:
-                missing_sheets.append("Emails")
+                    # Emails
+                    if emails is not None:
+                        emails['Email (From:)'] = emails['From'].apply(extract_emails)
+                        emails['Email (To:)'] = emails['To'].apply(extract_emails)
+                        emails.dropna(subset=['Email (From:)', 'Email (To:)'], how='all', inplace=True)
+                        emails['Email (From:)'].fillna(android_id.iloc[0], inplace=True)
+                        emails['Email (To:)'].fillna(android_id.iloc[0], inplace=True)
+                        emails['to_from_tuple'] = list(zip(emails['Email (From:)'], emails['Email (To:)']))
+                        tuple_counts3 = emails['to_from_tuple'].value_counts()
+                        df_email = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+                        for (from_num, to_num), count in tuple_counts3.items():
+                            df_email.loc[len(df_email)] = [from_num, to_num, math.log((count + 5)**0.5)]
+                    else:
+                        missing_sheets.append("Emails")
 
-            if missing_sheets:
-                output_list.append(f"{uploaded_file.name} does not have the following sheet(s): {', '.join(missing_sheets)}")
-            
-            # Create networkx graph objects
-            G_email = nx.from_pandas_edgelist(df_email, source='from', target='to', edge_attr='weight', create_using=nx.DiGraph)
-            G_instant_messages = nx.from_pandas_edgelist(df_imsg, source='from', target='to', edge_attr='weight', create_using=nx.DiGraph)
-            G_call = nx.from_pandas_edgelist(df_call, source='from', target='to', edge_attr='weight', create_using=nx.DiGraph)
-            
-            if "Email" in selected_options:
-                G_combined = nx.compose(G_combined, G_email)
-                G_email_list.append(G_email)
+                    # Create networkx graph objects
+                    G_email = nx.from_pandas_edgelist(df_email, source='from', target='to', edge_attr='weight', create_using=nx.DiGraph)
+                    G_instant_messages = nx.from_pandas_edgelist(df_imsg, source='from', target='to', edge_attr='weight', create_using=nx.DiGraph)
+                    G_call = nx.from_pandas_edgelist(df_call, source='from', target='to', edge_attr='weight', create_using=nx.DiGraph)
 
-            if "Instant Messages" in selected_options:
-                G_combined = nx.compose(G_combined, G_instant_messages)
-                G_instant_messages_list.append(G_instant_messages)
+                    if "Email" in selected_options:
+                        G_combined = nx.compose(G_combined, G_email)
+                        G_email_list.append(G_email)
 
-            if "Call" in selected_options:
-                G_combined = nx.compose(G_combined, G_call)
-                G_call_list.append(G_call)
+                    if "Instant Messages" in selected_options:
+                        G_combined = nx.compose(G_combined, G_instant_messages)
+                        G_instant_messages_list.append(G_instant_messages)
 
+                    if "Call" in selected_options:
+                        G_combined = nx.compose(G_combined, G_call)
+                        G_call_list.append(G_call)
+
+                if missing_sheets:
+                    output_list.append(f"{uploaded_file.name} does not have the following sheet(s): {', '.join(missing_sheets)}")
+                
         for node, data in G_combined.nodes(data=True):
             if any(node in G.nodes() for G in G_email_list) and any(node in G.nodes() for G in G_instant_messages_list) and any(node in G.nodes() for G in G_call_list):
                 data['color'] = '#5c5c5c'
@@ -232,8 +223,7 @@ def main():
                 data['color'] = '#999403'
             elif any((source, target) in G.edges() for G in G_call_list):
                 data['color'] = 'red'
-        
-        
+            
         all_nodes = set()
         all_nodes.update(G_combined.nodes())
         node_list.extend(all_nodes)
@@ -314,7 +304,5 @@ def main():
                     Upload one or more xls/xlsx file(s) at the sidebar to see the network graph visualization.
                 """)
         
-                
-
 if __name__ == "__main__":
     main()
