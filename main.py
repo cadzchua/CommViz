@@ -134,6 +134,7 @@ def main():
                 android_id = device_info[device_info["Name"] == "Android ID"]['Value'] # Extracted User Device ID
             else:
                 missing_sheets.append("Device Information")
+                break
 
             # Call Log
             if call_log is not None:
