@@ -302,19 +302,43 @@ def main():
             with st.expander("Instant Messages"):
                 # Display the DataFrame for instant messages
                 message_concatenated_df = pd.concat(message_list)
-                st.write(message_concatenated_df.reset_index(drop=True))
+                if search_node:
+                    filtered_df_from = message_concatenated_df[message_concatenated_df['from'].isin(search_node)]
+                    filtered_df_to = message_concatenated_df[message_concatenated_df['to'].isin(search_node)]
+                  
+                    filtered_df_message = pd.concat([filtered_df_from, filtered_df_to])
+                    st.write("Filtered DataFrame:")
+                    st.write(filtered_df_message.reset_index(drop=True))
+                else:
+                    st.write(message_concatenated_df.reset_index(drop=True))
 
         if "Call" in selected_options:
             with st.expander("Call"):
                 # Display the DataFrame for calls
                 call_concatenated_df = pd.concat(call_list)
-                st.write(call_concatenated_df.reset_index(drop=True))
+                if search_node:
+                    filtered_df_from = call_concatenated_df[call_concatenated_df['from'].isin(search_node)]
+                    filtered_df_to = call_concatenated_df[call_concatenated_df['to'].isin(search_node)]
+                  
+                    filtered_df_call = pd.concat([filtered_df_from, filtered_df_to])
+                    st.write("Filtered DataFrame:")
+                    st.write(filtered_df_call.reset_index(drop=True))
+                else:
+                    st.write(call_concatenated_df.reset_index(drop=True))
 
         if "Email" in selected_options:
             with st.expander("Email"):
                 # Display the DataFrame for emails
                 email_concatenated_df = pd.concat(email_list)
-                st.write(email_concatenated_df.reset_index(drop=True))
+                if search_node:
+                    filtered_df_from = email_concatenated_df[email_concatenated_df['from'].isin(search_node)]
+                    filtered_df_to = email_concatenated_df[email_concatenated_df['to'].isin(search_node)]
+                  
+                    filtered_df_email = pd.concat([filtered_df_from, filtered_df_to])
+                    st.write("Filtered DataFrame:")
+                    st.write(filtered_df_email.reset_index(drop=True))
+                else:
+                    st.write(email_concatenated_df.reset_index(drop=True))
     else:
         st.write("""
                     # Network Graph Visualization
