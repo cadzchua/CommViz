@@ -114,6 +114,7 @@ def main():
         if len(selected_options) == 0:
                 st.text('Choose at least 1 option to start')
         if len(selected_options):
+            email_list, message_list, call_list = [], [], []
             for uploaded_file in uploaded_files:
                 missing_sheets = []
                 device_info, call_log, instant_msgs, emails = parse_xls_file(uploaded_file)
@@ -136,9 +137,9 @@ def main():
                         call_log['Phone (To:)'].fillna(android_id.iloc[0], inplace=True)    
                         call_log['to_from_tuple'] = list(zip(call_log['Phone (From:)'], call_log['Phone (To:)']))
                         tuple_counts = call_log['to_from_tuple'].value_counts()
-                        df_call = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+                        df_call = pd.DataFrame(columns=['from', 'to', 'count', 'weight'])  # Initialize an empty DataFrame
                         for (from_num, to_num), count in tuple_counts.items():
-                            df_call.loc[len(df_call)] = [from_num, to_num, math.log((count + 5)**0.5)]
+                            df_call.loc[len(df_call)] = [from_num, to_num, count, math.log((count + 5))]
                     else:
                         missing_sheets.append("Call Log")
 
@@ -151,9 +152,9 @@ def main():
                         instant_msgs['Phone (From:)'].fillna(android_id.iloc[0], inplace=True)
                         instant_msgs['to_from_tuple'] = list(zip(instant_msgs['Phone (From:)'], instant_msgs['Phone (To:)']))
                         tuple_counts2 = instant_msgs['to_from_tuple'].value_counts()
-                        df_imsg = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+                        df_imsg = pd.DataFrame(columns=['from', 'to', 'count', 'weight'])  # Initialize an empty DataFrame
                         for (from_num, to_num), count in tuple_counts2.items():
-                            df_imsg.loc[len(df_imsg)] = [from_num, to_num, math.log((count + 5)**0.5)]
+                            df_imsg.loc[len(df_imsg)] = [from_num, to_num, count, math.log((count + 5))]
                     else:
                         missing_sheets.append("Instant Messages")
 
@@ -166,9 +167,9 @@ def main():
                         emails['Email (To:)'].fillna(android_id.iloc[0], inplace=True)
                         emails['to_from_tuple'] = list(zip(emails['Email (From:)'], emails['Email (To:)']))
                         tuple_counts3 = emails['to_from_tuple'].value_counts()
-                        df_email = pd.DataFrame(columns=['from', 'to', 'weight'])  # Initialize an empty DataFrame
+                        df_email = pd.DataFrame(columns=['from', 'to', 'count', 'weight'])  # Initialize an empty DataFrame
                         for (from_num, to_num), count in tuple_counts3.items():
-                            df_email.loc[len(df_email)] = [from_num, to_num, math.log((count + 5)**0.5)]
+                            df_email.loc[len(df_email)] = [from_num, to_num, count, math.log((count + 5))]
                     else:
                         missing_sheets.append("Emails")
 
@@ -180,14 +181,17 @@ def main():
                     if "Email" in selected_options:
                         G_combined = nx.compose(G_combined, G_email)
                         G_email_list.append(G_email)
+                        email_list.append(df_email)
 
                     if "Instant Messages" in selected_options:
                         G_combined = nx.compose(G_combined, G_instant_messages)
                         G_instant_messages_list.append(G_instant_messages)
+                        message_list.append(df_imsg)
 
                     if "Call" in selected_options:
                         G_combined = nx.compose(G_combined, G_call)
                         G_call_list.append(G_call)
+                        call_list.append(df_call)
 
                 if missing_sheets:
                     output_list.append(f"{uploaded_file.name} does not have the following sheet(s): {', '.join(missing_sheets)}")
@@ -294,6 +298,23 @@ def main():
         """
         st.markdown(legend_html, unsafe_allow_html=True)
         st.sidebar.markdown('\n\n'.join(output_list))
+        if "Instant Messages" in selected_options:
+            with st.expander("Instant Messages"):
+                # Display the DataFrame for instant messages
+                message_concatenated_df = pd.concat(message_list)
+                st.write(message_concatenated_df.reset_index(drop=True))
+
+        if "Call" in selected_options:
+            with st.expander("Call"):
+                # Display the DataFrame for calls
+                call_concatenated_df = pd.concat(call_list)
+                st.write(call_concatenated_df.reset_index(drop=True))
+
+        if "Email" in selected_options:
+            with st.expander("Email"):
+                # Display the DataFrame for emails
+                email_concatenated_df = pd.concat(email_list)
+                st.write(email_concatenated_df.reset_index(drop=True))
     else:
         st.write("""
                     # Network Graph Visualization
