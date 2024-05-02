@@ -4,7 +4,6 @@ import pandas as pd
 import networkx as nx
 from pyvis.network import Network
 import re, os, math
-from googletrans import Translator
 
 def extract_emails(text):
     """
@@ -272,7 +271,7 @@ def main():
                             spring_strength=0.10,
                             damping=0.95
                         )
-
+        
         # Save and read graph as HTML file (on Streamlit Sharing)
         path = 'tmp'
         if not os.path.exists(path):
